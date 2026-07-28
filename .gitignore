@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+*.log
+
+# PostgreSQL
+db-data/
+pgdata/
+postgres-data/
+pg_wal/
+server-data/
+data/
+
+# Zabbix
+alertscripts/
+externalscripts/
+
+# Certificates (если приватные)
+*.key
+*.crt
+
+# Environment
+.env
