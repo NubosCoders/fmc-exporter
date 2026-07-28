@@ -1,14 +1,21 @@
+from copy import deepcopy
+from threading import Lock
+
+
 cached_data = {
     "timestamp": 0,
     "stats": {},
     "tunnels": []
 }
+cache_lock = Lock()
 
 
 def get_cache():
-    return cached_data
+    with cache_lock:
+        return deepcopy(cached_data)
 
 
 def set_cache(data):
-    cached_data.clear()
-    cached_data.update(data)
+    global cached_data
+    with cache_lock:
+        cached_data = deepcopy(data)

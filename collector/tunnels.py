@@ -18,12 +18,13 @@ def get_tunnels(token, domain):
         "stats": {
             "total": 0,
             "up": 0,
-            "down": 0
+            "down": 0,
+            "unknown": 0
         },
         "tunnels": []
     }
 
-    for item in data.get("items", []):
+    for item in data.get("items") or []:
 
         tunnel = normalize_tunnel(item)
 
@@ -32,7 +33,9 @@ def get_tunnels(token, domain):
 
         if tunnel["state"] == "TUNNEL_UP":
             result["stats"]["up"] += 1
-        else:
+        elif tunnel["state"] == "TUNNEL_DOWN":
             result["stats"]["down"] += 1
+        else:
+            result["stats"]["unknown"] += 1
 
     return result

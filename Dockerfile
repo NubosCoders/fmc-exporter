@@ -7,15 +7,15 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
+COPY collector/ ./collector/
 
-COPY collector/* ./collector/
+RUN addgroup -S exporter && adduser -S -G exporter exporter
 
-USER root
+USER exporter
 
-RUN apk add --no-cache ca-certificates
+EXPOSE 8080
 
-COPY certs/fmc-ca.crt /usr/local/share/ca-certificates/
-
-RUN update-ca-certificates
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
 
 CMD ["python", "-u", "app.py"]

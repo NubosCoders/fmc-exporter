@@ -1,78 +1,42 @@
 services:
-  # Database backend
-  postgres-server:
-    image: postgres:16-alpine
-    container_name: postgres-server
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    networks:
-      - zabbix-net
-    restart: always
-
-  # Zabbix Server
-  zabbix-server:
-    image: zabbix/zabbix-server-pgsql:ubuntu-7.4-latest
-    container_name: zabbix-server
-    ports:
-      - "10051:10051"
-    environment:
-      DB_SERVER_HOST: postgres-server
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - zbx_server_alertscripts:/usr/lib/zabbix/alertscripts
-      - zbx_server_externalscripts:/usr/lib/zabbix/externalscripts
-    depends_on:
-      - postgres-server
-    networks:
-      - zabbix-net
-    restart: always
-
-  # Zabbix Frontend Web Interface
-  zabbix-web:
-    image: zabbix/zabbix-web-nginx-pgsql:ubuntu-7.4-latest
-    container_name: zabbix-web
-    ports:
-      - "8080:8080"
-    environment:
-      ZBX_SERVER_HOST: ${ZBX_SERVER_HOST}
-      DB_SERVER_HOST: postgres-server
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      PHP_TZ: "UTC"
-    depends_on:
-      - postgres-server
-      - zabbix-server
-    restart: always
-    networks:
-      - zabbix-net
-
   fmc-collector:
     build:
       context: .
-    container_name: fmc-collector
     environment:
       FMC_URL: ${FMC_URL}
       FMC_USER: ${FMC_USER}
       FMC_PASSWORD: ${FMC_PASSWORD}
-
-    volumes:
-      - ./data:/data
+      FMC_CA_BUNDLE: ${FMC_CA_BUNDLE:-}
+      FMC_TLS_VERIFY: ${FMC_TLS_VERIFY:-true}
+      FMC_TLS_VERIFY_HOSTNAME: ${FMC_TLS_VERIFY_HOSTNAME:-true}
+      FMC_TRUST_ENV: ${FMC_TRUST_ENV:-false}
+      HTTP_PORT: ${HTTP_PORT:-8080}
+      UPDATE_INTERVAL: ${UPDATE_INTERVAL:-60}
+      CONNECT_TIMEOUT: ${CONNECT_TIMEOUT:-5}
+      READ_TIMEOUT: ${READ_TIMEOUT:-30}
+      OUTPUT_FILE: ${OUTPUT_FILE:-}
+    ports:
+      - "${EXPORTER_PORT:-8081}:${HTTP_PORT:-8080}"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - "http://127.0.0.1:${HTTP_PORT:-8080}/health"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     networks:
-      - zabbix-net
+      monitoring:
+        aliases:
+          - fmc-exporter
     restart: unless-stopped
 
-volumes:
-  pg_data:
-  zbx_server_alertscripts:
-  zbx_server_externalscripts:
 
 networks:
-  zabbix-net:
-    driver: bridge
+  monitoring:
+    external: true
+    name: monitoring

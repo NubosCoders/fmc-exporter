@@ -1,12 +1,22 @@
+def first_or_none(values):
+    return values[0] if values else None
+
+
+def mapping(value):
+    return value if isinstance(value, dict) else {}
+
+
 # Преобразуем данные о туннеле в удобный формат для сохранения в JSON
 def normalize_tunnel(item):
+    peer_a = mapping(item.get("peerA"))
+    peer_b = mapping(item.get("peerB"))
 
     return {
 
         "id": item.get("id"),
 
         "name":
-            item.get("vpnTopology", {})
+            mapping(item.get("vpnTopology"))
             .get("name"),
 
         "state":
@@ -14,30 +24,29 @@ def normalize_tunnel(item):
 
 
         "peerA":
-            item.get("peerA", {})
-            .get("device", {})
+            mapping(peer_a.get("device"))
             .get("name"),
 
 
         "peerAIP":
-            item.get("peerA", {})
-            .get("ipAddresses", {})
-            .get("v4", [None])[0],
+            first_or_none(
+                mapping(peer_a.get("ipAddresses"))
+                .get("v4")
+            ),
 
 
         "peerB":
-            item.get("peerB", {})
-            .get("device", {})
+            mapping(peer_b.get("device"))
             .get("name"),
 
 
         "peerBIP":
-            item.get("peerB", {})
-            .get("ipAddresses", {})
-            .get("v4", [None])[0],
+            first_or_none(
+                mapping(peer_b.get("ipAddresses"))
+                .get("v4")
+            ),
 
 
         "lastChange":
             item.get("lastChange")
     }
-

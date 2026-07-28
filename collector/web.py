@@ -1,16 +1,17 @@
 import json
 import time
+from urllib.parse import urlparse
 
 from http.server import (
     BaseHTTPRequestHandler,
-    HTTPServer
+    ThreadingHTTPServer,
 )
 
 from .cache import get_cache
 from .config import HTTP_PORT
 from .state import (
     START_TIME,
-    collector_state
+    get_state,
 )
 
 
@@ -31,12 +32,19 @@ class ApiHandler(BaseHTTPRequestHandler):
         )
         self.end_headers()
 
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # The client may time out or disconnect while a response is sent.
+            # This must not produce a traceback or affect other requests.
+            return
 
 
     def do_GET(self):
+        path = urlparse(self.path).path
 
-        if self.path == "/health":
+        if path == "/health":
+            state = get_state()
 
             uptime = int(
                 time.time() - START_TIME
@@ -46,19 +54,22 @@ class ApiHandler(BaseHTTPRequestHandler):
                 200,
                 {
                     "status": "UP",
-                    "healthy": collector_state["healthy"],
-                    "version": collector_state["version"],
+                    "collector_status": state["status"],
+                    "healthy": state["healthy"],
+                    "version": state["version"],
                     "uptime": uptime,
-                    "last_success": collector_state["last_success"],
-                    "last_error": collector_state["last_error"],
-                    "fmc_connected": collector_state["healthy"]
+                    "last_attempt": state["last_attempt"],
+                    "last_success": state["last_success"],
+                    "last_error": state["last_error"],
+                    "last_error_time": state["last_error_time"],
+                    "fmc_connected": state["fmc_connected"],
                 }
             )
 
             return
 
 
-        if self.path == "/tunnels":
+        if path == "/tunnels":
 
             self.send_json(
                 200,
@@ -82,7 +93,9 @@ class ApiHandler(BaseHTTPRequestHandler):
 
 def start_http():
 
-    server = HTTPServer(
+    # Each client gets its own thread. A slow or disconnected healthcheck must
+    # not block Zabbix or subsequent health/tunnel requests.
+    server = ThreadingHTTPServer(
         ("0.0.0.0", HTTP_PORT),
         ApiHandler
     )

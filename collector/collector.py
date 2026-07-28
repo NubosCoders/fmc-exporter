@@ -3,21 +3,14 @@ from threading import Thread
 
 from .cache import set_cache
 from .config import UPDATE_INTERVAL
-from .fmc import get_domain, login
-from .state import set_attempt, set_error, set_success
+from .fmc import FmcAuthenticationError, FmcError, get_domain, login
+from .state import set_attempt, set_error, set_fmc_disconnected, set_success
 from .tunnels import get_tunnels
 from .utils import save_json
 from .web import start_http
 
 
-def main():
-    # HTTP API должен запускаться независимо от доступности FMC.
-    Thread(
-        target=start_http,
-        daemon=True,
-        name="fmc-http-server",
-    ).start()
-
+def collect_forever():
     token = None
     domain = None
 
@@ -37,26 +30,30 @@ def main():
             save_json(tunnels)
             set_success()
 
+        except FmcAuthenticationError as error:
+            set_error(error)
+            set_fmc_disconnected()
+            token = None
+            domain = None
+            print("Collector authentication error:", error, flush=True)
+
+        except FmcError as error:
+            set_error(error)
+            set_fmc_disconnected()
+            print("Collector FMC error:", error, flush=True)
+
         except Exception as error:
             set_error(error)
-
-            print(
-                "Collector error:",
-                error,
-                flush=True,
-            )
-
-            error_text = str(error)
-            if (
-                "Refresh token failed" in error_text
-                or "HTTP 401" in error_text
-                or "Login failed" in error_text
-            ):
-                print(
-                    "FMC authentication will be retried",
-                    flush=True,
-                )
-                token = None
-                domain = None
+            print("Collector error:", error, flush=True)
 
         time.sleep(UPDATE_INTERVAL)
+
+
+def main():
+    # Keep the HTTP server in the main thread so its failure stops the process.
+    Thread(
+        target=collect_forever,
+        daemon=True,
+        name="fmc-collector",
+    ).start()
+    start_http()

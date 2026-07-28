@@ -1,5 +1,6 @@
 # macOS
 .DS_Store
+__MACOSX/
 
 # IDE
 .vscode/
@@ -7,6 +8,7 @@
 
 # Docker
 *.log
+docker-compose.override.yaml
 
 # PostgreSQL
 db-data/
@@ -21,8 +23,20 @@ alertscripts/
 externalscripts/
 
 # Certificates (если приватные)
+certs/
 *.key
 *.crt
+*.pem
+*.p12
+*.pfx
 
 # Environment
 .env
+.env.*
+!.env.example
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
