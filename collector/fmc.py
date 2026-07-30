@@ -1,3 +1,4 @@
+import logging
 import os
 import ssl
 
@@ -14,6 +15,9 @@ from .config import (
     FMC_USER,
     REQUEST_TIMEOUT,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class FmcError(RuntimeError):
@@ -49,16 +53,12 @@ session = requests.Session()
 # ambient proxy unless this is explicitly enabled.
 session.trust_env = FMC_TRUST_ENV
 if not FMC_TLS_VERIFY:
-    print(
-        "WARNING: FMC TLS certificate verification is fully disabled",
-        flush=True,
-    )
+    logger.warning("FMC TLS certificate verification is fully disabled")
 elif not FMC_TLS_VERIFY_HOSTNAME:
     session.mount("https://", NoHostnameVerificationAdapter())
-    print(
-        "WARNING: FMC TLS hostname verification is disabled; "
-        "certificate chain verification remains enabled",
-        flush=True,
+    logger.warning(
+        "FMC TLS hostname verification is disabled; "
+        "certificate chain verification remains enabled"
     )
 SYSTEM_CA_BUNDLE = ssl.get_default_verify_paths().cafile
 
@@ -112,7 +112,7 @@ def login():
     if response.status_code != 204:
         raise FmcAuthenticationError(f"Login failed HTTP {response.status_code}")
 
-    print("FMC login successful", flush=True)
+    logger.info("FMC login successful")
     return token_from_headers(response)
 
 
@@ -130,7 +130,7 @@ def refresh_token(token):
             f"Refresh token failed HTTP {response.status_code}"
         )
 
-    print("FMC token refreshed", flush=True)
+    logger.info("FMC token refreshed")
     return token_from_headers(response)
 
 
@@ -166,5 +166,5 @@ def get_domain(token):
         raise FmcError("No FMC domains found")
 
     domain = items[0]["uuid"]
-    print(f"FMC domain: {domain}", flush=True)
+    logger.info("FMC domain: %s", domain)
     return domain

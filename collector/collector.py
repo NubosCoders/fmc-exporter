@@ -1,13 +1,36 @@
+import logging
 import time
 from threading import Thread
 
 from .cache import set_cache
 from .config import UPDATE_INTERVAL
 from .fmc import FmcAuthenticationError, FmcError, get_domain, login
-from .state import set_attempt, set_error, set_fmc_disconnected, set_success
+from .state import set_attempt, set_error, set_success
 from .tunnels import get_tunnels
 from .utils import save_json
 from .web import start_http
+
+
+logger = logging.getLogger(__name__)
+
+
+def collect_once(token, domain):
+    if token is None or domain is None:
+        token = login()
+        domain = get_domain(token)
+
+    tunnels = get_tunnels(token, domain)
+    set_cache(tunnels)
+    set_success()
+
+    try:
+        save_json(tunnels)
+    except Exception:
+        # OUTPUT_FILE is a legacy optional snapshot. The in-memory cache is
+        # already valid, so a file error must not mark FMC collection failed.
+        logger.exception("Could not save optional JSON snapshot")
+
+    return token, domain
 
 
 def collect_forever():
@@ -18,33 +41,21 @@ def collect_forever():
         set_attempt()
 
         try:
-            # Авторизация находится внутри рабочего цикла, чтобы временная
-            # недоступность FMC не завершала процесс collector.
-            if token is None or domain is None:
-                token = login()
-                domain = get_domain(token)
-
-            tunnels = get_tunnels(token, domain)
-
-            set_cache(tunnels)
-            save_json(tunnels)
-            set_success()
+            token, domain = collect_once(token, domain)
 
         except FmcAuthenticationError as error:
             set_error(error)
-            set_fmc_disconnected()
             token = None
             domain = None
-            print("Collector authentication error:", error, flush=True)
+            logger.exception("Collector authentication error: %s", error)
 
         except FmcError as error:
             set_error(error)
-            set_fmc_disconnected()
-            print("Collector FMC error:", error, flush=True)
+            logger.exception("Collector FMC error: %s", error)
 
         except Exception as error:
             set_error(error)
-            print("Collector error:", error, flush=True)
+            logger.exception("Unexpected collector error: %s", error)
 
         time.sleep(UPDATE_INTERVAL)
 

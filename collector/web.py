@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from urllib.parse import urlparse
 
@@ -13,6 +14,9 @@ from .state import (
     START_TIME,
     get_state,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class ApiHandler(BaseHTTPRequestHandler):
@@ -62,6 +66,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                     "last_success": state["last_success"],
                     "last_error": state["last_error"],
                     "last_error_time": state["last_error_time"],
+                    "consecutive_failures": state["consecutive_failures"],
+                    "total_failures": state["total_failures"],
                     "fmc_connected": state["fmc_connected"],
                 }
             )
@@ -100,9 +106,6 @@ def start_http():
         ApiHandler
     )
 
-    print(
-        f"HTTP server listening on :{HTTP_PORT}",
-        flush=True
-    )
+    logger.info("HTTP server listening on :%s", HTTP_PORT)
 
     server.serve_forever()

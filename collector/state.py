@@ -10,11 +10,13 @@ collector_state = {
     "status": "STARTING",
     "healthy": False,
     "fmc_connected": False,
-    "last_success": 0,
     "last_attempt": 0,
+    "last_success": 0,
     "last_error": "",
     "last_error_time": 0,
-    "version": "1.3.0",
+    "consecutive_failures": 0,
+    "total_failures": 0,
+    "version": "1.4.0",
 }
 state_lock = Lock()
 
@@ -38,10 +40,10 @@ def set_success():
         collector_state["status"] = "HEALTHY"
         collector_state["healthy"] = True
         collector_state["fmc_connected"] = True
-        collector_state["last_attempt"] = now
         collector_state["last_success"] = now
         collector_state["last_error"] = ""
         collector_state["last_error_time"] = 0
+        collector_state["consecutive_failures"] = 0
 
 
 def set_error(error):
@@ -51,10 +53,8 @@ def set_error(error):
     with state_lock:
         collector_state["status"] = "DEGRADED"
         collector_state["healthy"] = False
+        collector_state["fmc_connected"] = False
         collector_state["last_error"] = str(error)
         collector_state["last_error_time"] = now
-
-
-def set_fmc_disconnected():
-    with state_lock:
-        collector_state["fmc_connected"] = False
+        collector_state["consecutive_failures"] += 1
+        collector_state["total_failures"] += 1
