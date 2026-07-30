@@ -43,3 +43,6 @@ __pycache__/
 
 # json
 fmc_oas3.json
+
+# Other
+*.md
