@@ -25,6 +25,73 @@ collector state, last attempt/success/error timestamps, and FMC connectivity.
 `/tunnels` returns the latest successful snapshot and counts `up`, `down`, and
 `unknown` states.
 
+## Collector health
+
+`GET /health` always returns HTTP `200` while the exporter HTTP process is
+available, including when FMC cannot be reached. Example:
+
+```json
+{
+  "status": "UP",
+  "collector_status": "HEALTHY",
+  "healthy": true,
+  "fmc_connected": true,
+  "version": "1.4.0",
+  "uptime": 86400,
+  "last_attempt": 1785312000,
+  "last_success": 1785312001,
+  "last_error": "",
+  "last_error_time": 0,
+  "consecutive_failures": 0,
+  "total_failures": 4
+}
+```
+
+`collector_status` has three possible values:
+
+- `STARTING`: no collection cycle has succeeded yet;
+- `HEALTHY`: the latest collection cycle succeeded;
+- `DEGRADED`: the latest collection cycle failed.
+
+`consecutive_failures` resets after a successful cycle. `total_failures` counts
+failed cycles since process startup and resets only when the process restarts.
+`last_success` and the `/tunnels` cache retain the last real successful result
+when a later collection fails.
+
+### Zabbix health monitoring
+
+Create an HTTP Agent master item such as `collector.health.raw` for:
+
+```text
+http://fmc-exporter:8080/health
+```
+
+Suggested dependent items and JSONPath expressions:
+
+| Item | JSONPath |
+|---|---|
+| Collector healthy | `$.healthy` |
+| Last attempt | `$.last_attempt` |
+| Last success | `$.last_success` |
+| Consecutive failures | `$.consecutive_failures` |
+| Total failures | `$.total_failures` |
+
+Example trigger conditions:
+
+```text
+# Exporter HTTP API is unavailable
+nodata(/FMC Collector/collector.health.raw,2m)=1
+
+# Worker has not attempted collection for three minutes
+now()-last(/FMC Collector/collector.last_attempt)>180
+
+# FMC collection failed three times in a row
+last(/FMC Collector/collector.consecutive_failures)>=3
+
+# Cached data is older than three minutes
+now()-last(/FMC Collector/collector.last_success)>180
+```
+
 ## TLS
 
 Certificate verification is enabled by default. For an FMC signed by a private

@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from collector.cache import get_cache, set_cache
-from collector import fmc
+from collector import collector, fmc
 from collector.models import normalize_tunnel
 from collector.tunnels import get_tunnels
 
@@ -66,6 +66,27 @@ class AtomicSnapshotTests(unittest.TestCase):
             with patch.object(utils, "OUTPUT_FILE", output):
                 utils.save_json({"tunnels": []})
             self.assertTrue(os.path.exists(output))
+
+    @patch("collector.collector.save_json", side_effect=OSError("read-only"))
+    @patch("collector.collector.set_success")
+    @patch(
+        "collector.collector.get_tunnels",
+        return_value={"timestamp": 1, "stats": {}, "tunnels": []},
+    )
+    def test_optional_snapshot_error_does_not_fail_collection(
+        self,
+        _get_tunnels,
+        set_success,
+        _save_json,
+    ):
+        with self.assertLogs("collector.collector", level="ERROR"):
+            token, domain = collector.collect_once(
+                {"access": "token"},
+                "domain",
+            )
+        self.assertEqual(token, {"access": "token"})
+        self.assertEqual(domain, "domain")
+        set_success.assert_called_once_with()
 
 
 class TlsTests(unittest.TestCase):

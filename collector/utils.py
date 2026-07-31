@@ -1,8 +1,13 @@
 import json
+import logging
 import os
 import tempfile
 
 from .config import OUTPUT_FILE
+
+
+logger = logging.getLogger(__name__)
+
 
 def save_json(data):
     if not OUTPUT_FILE:
@@ -28,7 +33,4 @@ def save_json(data):
             os.unlink(temp_path)
 
 
-    print(
-        f"Saved {len(data['tunnels'])} tunnels",
-        flush=True
-    )
+    logger.info("Saved %s tunnels", len(data["tunnels"]))
