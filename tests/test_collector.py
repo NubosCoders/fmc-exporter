@@ -3,8 +3,14 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from collector.cache import get_cache, set_cache
-from collector import collector, fmc
+from collector.cache import (
+    get_cache,
+    get_devices_cache,
+    set_cache,
+    set_devices_cache,
+)
+from collector import collector, fmc, state
+from collector.fmc import FmcError
 from collector.models import normalize_tunnel
 from collector.tunnels import get_tunnels
 
@@ -56,6 +62,14 @@ class CollectorDataTests(unittest.TestCase):
         snapshot["tunnels"][0]["id"] = "changed"
         self.assertEqual(get_cache()["tunnels"][0]["id"], "one")
 
+    def test_devices_cache_returns_an_independent_snapshot(self):
+        set_devices_cache(
+            {"timestamp": 1, "stats": {"total": 1}, "devices": [{"id": "one"}]}
+        )
+        snapshot = get_devices_cache()
+        snapshot["devices"][0]["id"] = "changed"
+        self.assertEqual(get_devices_cache()["devices"][0]["id"], "one")
+
 
 class AtomicSnapshotTests(unittest.TestCase):
     def test_snapshot_is_written_when_enabled(self):
@@ -70,12 +84,17 @@ class AtomicSnapshotTests(unittest.TestCase):
     @patch("collector.collector.save_json", side_effect=OSError("read-only"))
     @patch("collector.collector.set_success")
     @patch(
+        "collector.collector.get_devices",
+        return_value={"timestamp": 1, "stats": {"total": 0}, "devices": []},
+    )
+    @patch(
         "collector.collector.get_tunnels",
         return_value={"timestamp": 1, "stats": {}, "tunnels": []},
     )
     def test_optional_snapshot_error_does_not_fail_collection(
         self,
         _get_tunnels,
+        _get_devices,
         set_success,
         _save_json,
     ):
@@ -87,6 +106,40 @@ class AtomicSnapshotTests(unittest.TestCase):
         self.assertEqual(token, {"access": "token"})
         self.assertEqual(domain, "domain")
         set_success.assert_called_once_with()
+
+    @patch("collector.collector.set_success")
+    @patch(
+        "collector.collector.get_devices",
+        side_effect=FmcError("device inventory unavailable"),
+    )
+    @patch(
+        "collector.collector.get_tunnels",
+        return_value={"timestamp": 2, "stats": {}, "tunnels": [{"id": "new"}]},
+    )
+    def test_device_error_preserves_previous_inventory_and_degrades_health(
+        self,
+        _get_tunnels,
+        _get_devices,
+        set_success,
+    ):
+        set_devices_cache(
+            {
+                "timestamp": 1,
+                "stats": {"total": 1},
+                "devices": [{"id": "previous"}],
+            }
+        )
+
+        state.set_attempt()
+        with self.assertRaises(FmcError) as raised:
+            collector.collect_once({"access": "token"}, "domain")
+        state.set_error(raised.exception)
+
+        self.assertEqual(get_cache()["tunnels"][0]["id"], "new")
+        self.assertEqual(get_devices_cache()["devices"][0]["id"], "previous")
+        self.assertEqual(state.get_state()["status"], "DEGRADED")
+        self.assertIn("device inventory unavailable", state.get_state()["last_error"])
+        set_success.assert_not_called()
 
 
 class TlsTests(unittest.TestCase):

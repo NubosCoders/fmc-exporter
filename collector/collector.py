@@ -2,8 +2,9 @@ import logging
 import time
 from threading import Thread
 
-from .cache import set_cache
+from .cache import set_cache, set_devices_cache
 from .config import UPDATE_INTERVAL
+from .devices import get_devices
 from .fmc import FmcAuthenticationError, FmcError, get_domain, login
 from .state import set_attempt, set_error, set_success
 from .tunnels import get_tunnels
@@ -21,6 +22,10 @@ def collect_once(token, domain):
 
     tunnels = get_tunnels(token, domain)
     set_cache(tunnels)
+
+    devices = get_devices(token, domain)
+    set_devices_cache(devices)
+
     set_success()
 
     try:
