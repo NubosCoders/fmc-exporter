@@ -8,7 +8,7 @@ from http.server import (
     ThreadingHTTPServer,
 )
 
-from .cache import get_cache
+from .cache import get_cache, get_devices_cache
 from .config import HTTP_PORT
 from .state import (
     START_TIME,
@@ -80,6 +80,16 @@ class ApiHandler(BaseHTTPRequestHandler):
             self.send_json(
                 200,
                 get_cache()
+            )
+
+            return
+
+
+        if path == "/devices":
+
+            self.send_json(
+                200,
+                get_devices_cache()
             )
 
             return

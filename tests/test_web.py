@@ -5,6 +5,7 @@ from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 
 from collector.web import ApiHandler
+from collector.cache import set_devices_cache
 from tests.test_state import reset_state
 
 
@@ -38,6 +39,9 @@ class WebTests(unittest.TestCase):
 
     def setUp(self):
         reset_state()
+        set_devices_cache(
+            {"timestamp": 0, "stats": {"total": 0}, "devices": []}
+        )
 
     def test_health_starting(self):
         status, body = self.get("/health")
@@ -45,7 +49,7 @@ class WebTests(unittest.TestCase):
         self.assertEqual(body["status"], "UP")
         self.assertEqual(body["collector_status"], "STARTING")
         self.assertFalse(body["healthy"])
-        self.assertEqual(body["version"], "1.4.0")
+        self.assertEqual(body["version"], "1.5.0")
         self.assertEqual(body["consecutive_failures"], 0)
         self.assertEqual(body["total_failures"], 0)
 
@@ -97,6 +101,31 @@ class WebTests(unittest.TestCase):
         status, body = self.get("/tunnels")
         self.assertEqual(status, 200)
         self.assertIn("tunnels", body)
+
+    def test_devices_returns_cached_inventory(self):
+        set_devices_cache(
+            {
+                "timestamp": 123,
+                "stats": {"total": 1},
+                "devices": [{"id": "device-uuid", "name": "FTD-1"}],
+            }
+        )
+
+        status, body = self.get("/devices")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["stats"], {"total": 1})
+        self.assertEqual(body["devices"][0]["id"], "device-uuid")
+
+    def test_devices_responds_while_collector_is_degraded(self):
+        from collector import state
+
+        with state.state_lock:
+            state.collector_state["status"] = "DEGRADED"
+            state.collector_state["healthy"] = False
+
+        status, body = self.get("/devices")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["devices"], [])
 
     def test_query_string_does_not_change_route(self):
         status, body = self.get("/health?full=true")

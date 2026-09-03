@@ -16,7 +16,7 @@ collector_state = {
     "last_error_time": 0,
     "consecutive_failures": 0,
     "total_failures": 0,
-    "version": "1.4.0",
+    "version": "1.5.0",
 }
 state_lock = Lock()
 

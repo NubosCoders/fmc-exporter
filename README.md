@@ -1,8 +1,8 @@
 # fmc-exporter
 
 Small HTTP collector for Cisco Secure Firewall Management Center (FMC) VPN
-tunnel status. It exposes data for Zabbix or another HTTP client without
-requiring a shared JSON file.
+tunnel status and managed-device inventory. It exposes cached data for Zabbix
+or another HTTP client without requiring a shared JSON file.
 
 ## Quick start
 
@@ -18,12 +18,15 @@ requiring a shared JSON file.
    ```sh
    curl http://localhost:8081/health
    curl http://localhost:8081/tunnels
+   curl http://localhost:8081/devices
    ```
 
 The collector stays available while FMC is unreachable. `/health` reports the
 collector state, last attempt/success/error timestamps, and FMC connectivity.
 `/tunnels` returns the latest successful snapshot and counts `up`, `down`, and
-`unknown` states.
+`unknown` states. `/devices` returns the latest successfully collected FMC
+Device Inventory. HTTP requests read only the in-memory caches; FMC is polled
+by the background worker.
 
 ## Collector health
 
@@ -36,7 +39,7 @@ available, including when FMC cannot be reached. Example:
   "collector_status": "HEALTHY",
   "healthy": true,
   "fmc_connected": true,
-  "version": "1.4.0",
+  "version": "1.5.0",
   "uptime": 86400,
   "last_attempt": 1785312000,
   "last_success": 1785312001,
@@ -55,8 +58,10 @@ available, including when FMC cannot be reached. Example:
 
 `consecutive_failures` resets after a successful cycle. `total_failures` counts
 failed cycles since process startup and resets only when the process restarts.
-`last_success` and the `/tunnels` cache retain the last real successful result
-when a later collection fails.
+`last_success`, `/tunnels`, and `/devices` retain their last real successful
+results when a later collection fails. An inventory failure makes the whole
+collection cycle `DEGRADED`, but it does not replace the previous device cache
+with an empty result.
 
 ### Zabbix health monitoring
 
@@ -91,6 +96,58 @@ last(/FMC Collector/collector.consecutive_failures)>=3
 # Cached data is older than three minutes
 now()-last(/FMC Collector/collector.last_success)>180
 ```
+
+## Device Inventory
+
+`GET /devices` uses the read-only FMC Device Records endpoint and follows its
+`offset`/`limit` pagination until the complete inventory is cached. Example:
+
+```json
+{
+  "timestamp": 1785312000,
+  "stats": {
+    "total": 1
+  },
+  "devices": [
+    {
+      "id": "device-uuid",
+      "name": "FTD-1",
+      "model": "Cisco Secure Firewall",
+      "version": "7.4.2",
+      "management_ip": "192.0.2.10",
+      "health_status": "GREEN"
+    }
+  ]
+}
+```
+
+The `id` is the stable FMC UUID. `version` is read from the FMC `sw_version`
+field. `management_ip` is read from FMC `hostName`, whose API definition allows
+either a hostname or an IP address. Missing fields are `null`; only missing or
+empty `healthStatus` is normalized to the documented value `UNKNOWN`.
+
+### Zabbix device discovery
+
+Create an HTTP Agent master item for:
+
+```text
+http://fmc-exporter:8080/devices
+```
+
+Create a dependent Low-Level Discovery rule and preprocess it with JSONPath
+`$.devices[*]`. Suggested LLD macros are:
+
+| LLD macro | JSONPath relative to each device |
+|---|---|
+| `{#DEVICE.ID}` | `$.id` |
+| `{#DEVICE.NAME}` | `$.name` |
+| `{#DEVICE.MODEL}` | `$.model` |
+| `{#DEVICE.VERSION}` | `$.version` |
+| `{#DEVICE.MANAGEMENT}` | `$.management_ip` |
+| `{#DEVICE.HEALTH}` | `$.health_status` |
+
+Use `{#DEVICE.ID}` as the stable identifier in item and trigger prototype keys;
+device names and management addresses can change.
 
 ## TLS
 
